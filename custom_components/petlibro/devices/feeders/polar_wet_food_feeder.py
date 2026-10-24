@@ -8,10 +8,25 @@ from ...exceptions import PetLibroAPIError
 from ..device import Device
 from typing import cast
 from logging import getLogger
+from homeassistant.util import dt as dt_util
+from ..work_records import (
+    FEEDING_MANUAL,
+    FEEDING_OTHER,
+    FEEDING_SCHEDULED,
+    feeding_event_type,
+    is_feeding_record,
+    is_pet_visit_record,
+    pet_visit_duration,
+)
 
 _LOGGER = getLogger(__name__)
 
 class PolarWetFoodFeeder(Device):
+    # Last values seen in the work records; kept when the record falls out of the
+    # (size-limited) workRecord window, e.g. after many pet visits.
+    _last_feed_time: datetime | None = None
+    _last_eating_duration: int | None = None
+
     async def refresh(self):
         """Refresh the device data from the API."""
         try:
@@ -50,6 +65,34 @@ class PolarWetFoodFeeder(Device):
     def available(self) -> bool:
         _LOGGER.debug(f"Device {self.device.name} availability: {self.device.online}")
         return self.device.online if hasattr(self.device, 'online') else True
+
+    @property
+    def last_feed_time(self) -> datetime | None:
+        """Time of the most recent scheduled or manual feeding (UTC)."""
+        for record in reversed(self.work_records):
+            if is_feeding_record(record) and feeding_event_type(record) in (
+                FEEDING_SCHEDULED, FEEDING_MANUAL, FEEDING_OTHER
+            ):
+                self._last_feed_time = dt_util.utc_from_timestamp(record["recordTime"] / 1000)
+                break
+        return self._last_feed_time
+
+    @property
+    def last_eating_duration(self) -> int | None:
+        """How long the pet ate during its most recent visit, in seconds."""
+        for record in reversed(self.work_records):
+            if is_pet_visit_record(record) and (duration := pet_visit_duration(record)) is not None:
+                self._last_eating_duration = duration
+                break
+        return self._last_eating_duration
+
+    @property
+    def today_eating_times(self) -> int:
+        return self._data.get("grainStatus", {}).get("todayEatingTimes", 0)
+
+    @property
+    def today_eating_time(self) -> int:
+        return self._data.get("grainStatus", {}).get("petEatingTime", 0)
 
     @property
     def battery_state(self) -> str:
