@@ -3,9 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from collections.abc import Callable
-import json
 import logging
-import re
 from typing import Any
 
 from homeassistant.components.event import EventEntity, EventEntityDescription
@@ -18,6 +16,16 @@ from .const import DOMAIN
 from .hub import PetLibroHub
 from .devices import Device
 from .devices.event import EVENT_UPDATE
+from .devices.work_records import (
+    FEEDING_EVENT_TYPES,
+    PET_VISIT_EVENT_TYPES,
+    feeding_event_type,
+    is_feeding_record,
+    is_pet_visit_record,
+    parse_params,
+    pet_visit_duration,
+    pet_visit_event_type,
+)
 from .devices.feeders.air_smart_feeder import AirSmartFeeder
 from .devices.feeders.granary_smart_feeder import GranarySmartFeeder
 from .devices.feeders.granary_smart_camera_feeder import GranarySmartCameraFeeder
@@ -34,20 +42,6 @@ ATTR_RECORD_TIME = "record_time"
 MAX_SEEN_RECORDS = 200
 
 
-def _parse_params(record: dict) -> dict[str, Any]:
-    """Return the record's JSON-encoded params as a dict ({} if absent/invalid)."""
-    params = record.get("params")
-    if isinstance(params, dict):
-        return params
-    if not isinstance(params, str) or not params:
-        return {}
-    try:
-        parsed = json.loads(params)
-    except ValueError:
-        return {}
-    return parsed if isinstance(parsed, dict) else {}
-
-
 def _base_attributes(record: dict) -> dict[str, Any]:
     return {
         "record_id": record["id"],
@@ -58,28 +52,9 @@ def _base_attributes(record: dict) -> dict[str, Any]:
     }
 
 
-def _is_feeding_record(record: dict) -> bool:
-    record_type = record.get("type") or ""
-    return record_type.startswith("GRAIN_OUTPUT") or record_type == "WET_GRAIN_EVENT"
-
-
-def _feeding_event_type(record: dict) -> str:
-    event_code = record.get("eventType") or ""
-    if "FAIL" in f"{record.get('type') or ''} {event_code}":
-        return "failed"
-    # Polar: "The lid has been open for four hours and automatically closed."
-    if event_code == "MANUAL_FEEDING_AUTO_SUCCESS" or "CLOSE" in event_code:
-        return "lid_closed"
-    if "PLAN" in event_code:
-        return "scheduled"
-    if "MANUAL" in event_code:
-        return "manual"
-    return "feed"
-
-
 def _feeding_attributes(record: dict) -> dict[str, Any]:
     attributes = _base_attributes(record)
-    params = _parse_params(record)
+    params = parse_params(record)
     if (plate := params.get("plate")) is not None:
         attributes["plate"] = plate
     if label := params.get("label") or record.get("label"):
@@ -89,22 +64,10 @@ def _feeding_attributes(record: dict) -> dict[str, Any]:
     return attributes
 
 
-def _is_pet_visit_record(record: dict) -> bool:
-    return record.get("type") == "DETECTION_EVENT"
-
-
-def _pet_visit_event_type(record: dict) -> str:
-    return "ate" if record.get("eventType") == "PET_DETECT_LEAVE_EVENT" else "detected"
-
-
 def _pet_visit_attributes(record: dict) -> dict[str, Any]:
     attributes = _base_attributes(record)
-    # e.g. {"seconds": "05s"} or {"seconds": "01m50s"}
-    seconds = str(_parse_params(record).get("seconds") or "").strip()
-    if match := re.fullmatch(r"(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s?)?", seconds):
-        if any(match.groups()):
-            hours, minutes, secs = (int(group or 0) for group in match.groups())
-            attributes["duration"] = hours * 3600 + minutes * 60 + secs
+    if (duration := pet_visit_duration(record)) is not None:
+        attributes["duration"] = duration
     return attributes
 
 
@@ -171,9 +134,6 @@ class PetLibroEventEntity(PetLibroEntity[_DeviceT], EventEntity):
             self.async_write_ha_state()
 
 
-FEEDING_EVENT_TYPES = ["scheduled", "manual", "lid_closed", "failed", "feed"]
-
-
 def _feeding_description(device_type: type[_DeviceT]) -> PetLibroEventEntityDescription[_DeviceT]:
     return PetLibroEventEntityDescription[device_type](
         key="feeding_event",
@@ -181,8 +141,8 @@ def _feeding_description(device_type: type[_DeviceT]) -> PetLibroEventEntityDesc
         icon="mdi:bowl-mix",
         name="Feeding",
         event_types=FEEDING_EVENT_TYPES,
-        record_filter=_is_feeding_record,
-        event_type_fn=_feeding_event_type,
+        record_filter=is_feeding_record,
+        event_type_fn=feeding_event_type,
         attributes_fn=_feeding_attributes,
     )
 
@@ -200,9 +160,9 @@ DEVICE_EVENT_MAP: dict[type[Device], list[PetLibroEventEntityDescription]] = {
             translation_key="pet_visit_event",
             icon="mdi:paw",
             name="Pet Visit",
-            event_types=["ate", "detected"],
-            record_filter=_is_pet_visit_record,
-            event_type_fn=_pet_visit_event_type,
+            event_types=PET_VISIT_EVENT_TYPES,
+            record_filter=is_pet_visit_record,
+            event_type_fn=pet_visit_event_type,
             attributes_fn=_pet_visit_attributes,
         ),
     ],

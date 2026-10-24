@@ -867,6 +867,36 @@ DEVICE_SENSOR_MAP: dict[type[Device], list[PetLibroSensorEntityDescription]] = {
             name="Next Clean Date",
             device_class=SensorDeviceClass.TIMESTAMP,
         ),
+        PetLibroSensorEntityDescription[PolarWetFoodFeeder](
+            key="last_feed_time",
+            translation_key="last_feed_time",
+            icon="mdi:history",
+            name="Last Feed Time",
+            device_class=SensorDeviceClass.TIMESTAMP,
+        ),
+        PetLibroSensorEntityDescription[PolarWetFoodFeeder](
+            key="last_eating_duration",
+            translation_key="last_eating_duration",
+            icon="mdi:timer-outline",
+            name="Last Eating Duration",
+            native_unit_of_measurement=UnitOfTime.SECONDS,
+            device_class=SensorDeviceClass.DURATION,
+        ),
+        PetLibroSensorEntityDescription[PolarWetFoodFeeder](
+            key="today_eating_times",
+            translation_key="today_eating_times",
+            icon="mdi:history",
+            state_class=SensorStateClass.TOTAL_INCREASING,
+            name="Today Eating Times"
+        ),
+        PetLibroSensorEntityDescription[PolarWetFoodFeeder](
+            key="today_eating_time",
+            translation_key="today_eating_time",
+            icon="mdi:history",
+            device_class=SensorDeviceClass.DURATION,
+            state_class=SensorStateClass.TOTAL_INCREASING,
+            name="Today's Total Eating Time"
+        ),
     ],
     SpaceSmartFeeder: [
         PetLibroSensorEntityDescription[SpaceSmartFeeder](
