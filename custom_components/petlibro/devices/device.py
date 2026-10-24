@@ -116,6 +116,21 @@ class Device(Event):
     def boundPets(self) -> list[dict]:
         return self._data.get("boundPets") or []
 
+    @property
+    def work_records(self) -> list[dict]:
+        """Flattened workRecord entries (all days), oldest first."""
+        raw = self._data.get("workRecord")
+        if not raw or not isinstance(raw, list):
+            return []
+        records = [
+            record
+            for day_entry in raw
+            if isinstance(day_entry, dict)
+            for record in day_entry.get("workRecords") or []
+            if isinstance(record, dict) and record.get("id") and isinstance(record.get("recordTime"), int)
+        ]
+        return sorted(records, key=lambda record: record["recordTime"])
+
     def set_device_id(self) -> None:
         """Update Device object data with it's Home Assistant device ID."""
         device = self.hub.device_register.async_get_device(
