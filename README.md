@@ -47,6 +47,13 @@ If you enjoy this integration and want to support its development, please consid
 ### Litter Boxes
 * Luma Smart Litter Box (PLLB001)
 
+### Feeding Events
+Feeders get a **Feeding** [event entity](https://www.home-assistant.io/integrations/event/) that fires once for every new feeding record from the PETLIBRO cloud, so feedings show up in the logbook/history and can trigger automations.
+* Event types: `scheduled`, `manual`, `lid_closed` (Polar: lid closed automatically after a manual feed), `failed`, `feed` (anything else)
+* Attributes: `record_time` (when it actually happened), `message`, `event_code`, `record_type`, `record_id`, plus `plate` / `label` / `portions` when provided by the device
+* The Polar Wet Food Feeder additionally gets a **Pet Visit** event entity (`ate` / `detected`) with the eating `duration` in seconds.
+* Records are polled with the regular update interval; events missed while Home Assistant was down are fired after restart (check `record_time`). Historic records are not fired on first setup.
+
 ### Pending Device(s)
 
 ### Some Devices / May or may not work as intended

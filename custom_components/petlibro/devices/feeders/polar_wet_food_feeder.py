@@ -39,6 +39,15 @@ class PolarWetFoodFeeder(Device):
         except PetLibroAPIError as err:
             _LOGGER.error(f"Error refreshing data for PolarWetFoodFeeder: {err}")
 
+        # Fetched separately so a workRecord failure doesn't block the main device data.
+        try:
+            get_work_record = await self.api.get_device_work_record(self.serial)
+            self.update_data({
+                "workRecord": get_work_record if get_work_record is not None else [],
+            })
+        except PetLibroAPIError as err:
+            _LOGGER.error(f"Error refreshing work records for PolarWetFoodFeeder: {err}")
+
     @property
     def available(self) -> bool:
         _LOGGER.debug(f"Device {self.device.name} availability: {self.device.online}")
